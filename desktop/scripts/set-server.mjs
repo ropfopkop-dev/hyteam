@@ -28,5 +28,6 @@ if (arg !== 'none') {
     console.warn('Внимание: адрес trycloudflare.com меняется после каждого перезапуска туннеля — вшивать его не стоит.');
   }
 }
-fs.writeFileSync(file, `${JSON.stringify({ url }, null, 2)}\n`);
+// Остальные поля (discover — репозиторий с адресом сервера) сохраняем.
+fs.writeFileSync(file, `${JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), url }, null, 2)}\n`);
 console.log(url ? `Готово: вшит сервер ${url}. Теперь соберите установщик: npm run dist` : 'Вшитый сервер убран.');

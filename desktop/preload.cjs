@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('hyteam', {
   tunnelStart: () => call('tunnel:start'),
   tunnelStop: () => call('tunnel:stop'),
   onTunnelState: subscribe('tunnel:state'),
+  setPublishToken: (token) => call('tunnel:publish-token', String(token ?? '')),
+  onPublishState: subscribe('tunnel:publish'),
 
   games: () => call('games:snapshot'),
   install: (id, meta) => call('games:install', Number(id), {

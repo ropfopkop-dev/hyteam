@@ -103,6 +103,20 @@ DATA_DIR=$DATA_DIR
 MAX_GAME_MB=0
 EOF
 fi
+# Публикация адреса туннеля в GitHub: программа HYTEAM у друзей найдёт сервер сама.
+# Токен вводится один раз и хранится только в $ENV_FILE (читает только root).
+PUBLISH_REPO_DEFAULT=ropfopkop-dev/hyteam
+if [ -z "$TOKEN" ] && ! grep -q '^PUBLISH_TOKEN=' "$ENV_FILE" && [ -t 0 ]; then
+  echo
+  echo "Чтобы друзьям не вводить адрес, сервер может публиковать его в github.com/$PUBLISH_REPO_DEFAULT."
+  echo "Нужен fine-grained токен GitHub (доступ только к этому репозиторию, Contents: Read and write)."
+  printf 'Вставьте токен (github_pat_…) или нажмите Enter, чтобы пропустить: '
+  read -rs PUB_TOKEN || PUB_TOKEN=""
+  echo
+  if [ -n "$PUB_TOKEN" ]; then
+    printf 'PUBLISH_REPO=%s\nPUBLISH_TOKEN=%s\n' "$PUBLISH_REPO_DEFAULT" "$PUB_TOKEN" >> "$ENV_FILE"
+  fi
+fi
 chown root:hyteam "$ENV_FILE"
 chmod 640 "$ENV_FILE"
 chown -R hyteam:hyteam "$DATA_DIR"
@@ -158,6 +172,24 @@ WantedBy=multi-user.target
 EOF
 fi
 
+# Служба публикации адреса (работает от root: ей нужен журнал туннеля и токен из $ENV_FILE).
+cat > /etc/systemd/system/hyteam-announce.service <<EOF
+[Unit]
+Description=HYTEAM: publish tunnel address to GitHub
+After=network-online.target hyteam-tunnel.service
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=$APP_DIR
+EnvironmentFile=$ENV_FILE
+ExecStart=$NODE_BIN deploy/announce.mjs
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # Команда, которая показывает текущий адрес магазина: hyteam-address
 cat > /usr/local/bin/hyteam-address <<'EOF'
 #!/bin/sh
@@ -204,6 +236,10 @@ systemctl restart hyteam
 if [ -z "$TOKEN" ]; then
   systemctl enable hyteam-tunnel >/dev/null 2>&1
   systemctl restart hyteam-tunnel
+  if grep -q '^PUBLISH_TOKEN=' "$ENV_FILE"; then
+    systemctl enable hyteam-announce >/dev/null 2>&1
+    systemctl restart hyteam-announce
+  fi
 fi
 
 say "Проверяю запуск"
@@ -226,6 +262,7 @@ cat <<EOF
 
   В программе HYTEAM: «Подключиться» → адрес выше
   Узнать адрес снова:  hyteam-address
+  Публикация адреса:   journalctl -u hyteam-announce -n 20
   Журнал сервера:      journalctl -u hyteam -f
   Перезапуск:          sudo systemctl restart hyteam
   Администратор:       sudo hyteam-make-admin логин

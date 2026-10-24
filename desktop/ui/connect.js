@@ -106,7 +106,7 @@ async function init() {
   showError(new URLSearchParams(location.search).get('error'));
   const info = await hy.info();
   $('#version').textContent = `HYTEAM ${info.version}`;
-  $('#url').value = info.mode === 'client' || info.builtInServer ? info.serverUrl : '';
+  $('#url').value = info.mode === 'client' || info.builtInServer || info.discovered ? info.serverUrl : '';
   $('#port').value = info.hostPort || 3000;
   $('#datadir').textContent = info.hostDataDir;
   $('#datadir').title = info.hostDataDir;

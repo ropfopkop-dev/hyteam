@@ -37,7 +37,8 @@ export default async function settings(el) {
           <div class="s-row"><span class="path-text">${app.serverUrl}</span><button type="button" class="btn btn-soft btn-sm" id="s-server">Сменить сервер</button></div></div>
         ${app.hostRunning ? html`<div class="note">${icon('users', 16)}<span>Сервер работает на этом компьютере. Друзья в вашей сети подключаются по адресу:
           ${app.lan.length ? app.lan.map((a, i) => html`${i ? ', ' : ''}<b>${a}</b>`) : html`<b>http://localhost:${app.hostPort}</b>`}</span></div>
-          <div class="field"><label>Доступ из интернета</label><div class="tunnel" id="s-tunnel"></div></div>` : ''}
+          <div class="field"><label>Доступ из интернета</label><div class="tunnel" id="s-tunnel"></div></div>
+          ${app.publish?.repo ? html`<div class="field"><label>Адрес для друзей — автоматически</label><div id="s-publish"></div></div>` : ''}` : ''}
         <div class="field"><label>Папка для установки игр</label>
           <div class="s-row"><span class="path-text" id="s-libdir">${app.libraryDir}</span><button type="button" class="btn btn-soft btn-sm" id="s-lib">Изменить</button></div>
           <div class="field-hint">Уже установленные игры останутся на своих местах</div></div>
@@ -74,6 +75,35 @@ export default async function settings(el) {
           toast('Адрес скопирован — отправьте его друзьям');
         }
       } catch (err) {
+        toastError(err);
+      }
+    });
+  }
+
+  const publishBox = $('#s-publish', el);
+  if (publishBox) {
+    let pub = app.publish;
+    const render = () => mount(publishBox, publishView(pub));
+    render();
+    const stopPub = hy.onPublishState((p) => {
+      pub = { ...pub, ...p };
+      render();
+    });
+    const prevStop = stopTunnelWatch;
+    stopTunnelWatch = () => {
+      prevStop();
+      stopPub();
+    };
+    publishBox.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-pub]');
+      if (!b) return;
+      b.disabled = true;
+      try {
+        pub = await hy.setPublishToken(b.dataset.pub === 'off' ? '' : $('#s-pub-token', publishBox).value);
+        toast(pub.enabled ? 'Готово: программа HYTEAM у друзей найдёт сервер сама' : 'Публикация адреса выключена');
+        render();
+      } catch (err) {
+        b.disabled = false;
         toastError(err);
       }
     });
@@ -217,6 +247,21 @@ async function renderSecurity(box) {
   };
 }
 
+function publishView(p) {
+  if (p.enabled) {
+    const status = p.state === 'error' ? html`<span class="status st-rejected">${icon('ban', 13)} ${p.error}</span>`
+      : p.state === 'ok' ? html`<span class="status st-approved">${icon('check', 13)} Опубликован ${fmt.ago(p.at)}</span>`
+        : html`<span class="status st-pending">${icon('clock', 13)} Опубликуется, когда откроется доступ из интернета</span>`;
+    return html`<div class="s-row">${status}<button type="button" class="btn btn-ghost btn-sm" data-pub="off">Выключить</button></div>
+      <div class="field-hint">Каждый раз, когда адрес туннеля меняется, он записывается в github.com/${p.repo} (файл server-address.json). Программа HYTEAM у друзей читает его при запуске и подключается сама.</div>`;
+  }
+  return html`<div class="s-row"><input class="input" id="s-pub-token" type="password" autocomplete="off" placeholder="github_pat_…">
+      <button type="button" class="btn btn-primary btn-sm" data-pub="on">Сохранить</button></div>
+    <div class="field-hint">Тогда друзьям не нужно вводить адрес: программа найдёт сервер сама, даже после перезапуска.
+      Нужен токен GitHub: github.com → Settings → Developer settings → Fine-grained tokens → Generate. Repository access — только ${p.repo},
+      Permissions → Contents: Read and write.</div>`;
+}
+
 function tunnelView(t) {
   if (t.state === 'downloading') {
     return html`<div class="tunnel-row"><div class="spinner sm"></div><span>Скачиваю cloudflared от Cloudflare… ${Math.round((t.progress || 0) * 100)}%</span></div>`;
@@ -226,7 +271,7 @@ function tunnelView(t) {
     return html`<div class="s-row"><span class="path-text tunnel-url">${t.url}</span>
         <button type="button" class="btn btn-primary btn-sm" data-tunnel="copy" data-url="${t.url}">${icon('check', 14)} Копировать</button>
         <button type="button" class="btn btn-ghost btn-sm" data-tunnel="stop">Закрыть доступ</button></div>
-      <div class="field-hint">Друзья вводят этот адрес в программе HYTEAM на экране «Подключиться». Адрес меняется после каждого перезапуска — отправляйте новый.
+      <div class="field-hint">Адрес меняется после каждого перезапуска. С публикацией адреса (ниже) программа у друзей находит новый сама, без неё — отправляйте новый адрес вручную.
         Игры любого размера загружаются через туннель по частям.</div>`;
   }
   return html`${t.error ? html`<div class="reject-note">${icon('ban', 14)} ${t.error}</div>` : ''}

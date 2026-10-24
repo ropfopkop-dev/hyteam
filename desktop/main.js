@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, net, screen, shell, utilityProcess } from 'electron';
 import { createGames } from './games.js';
 import { createTunnel } from './tunnel.js';
+import { fetchAddress, publishAddress } from '../server/publish-address.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..');
@@ -35,6 +36,7 @@ let config = {
   maximized: false,
   trayHintShown: false,
   tunnel: false,
+  publishToken: '', // токен GitHub: публиковать адрес туннеля для друзей (режим хоста)
 };
 function loadConfig() {
   try {
@@ -46,13 +48,37 @@ function loadConfig() {
 const saveConfig = () => fs.writeFileSync(configFile(), JSON.stringify(config, null, 2));
 
 // Адрес сервера, вшитый в установщик (npm run set-server). Пользователь подключается к нему сразу, без выбора.
-const BUILT_IN_SERVER = (() => {
+// discover — репозиторий GitHub, где сервер публикует свой текущий адрес (server-address.json).
+const SERVER_JSON = (() => {
   try {
-    return String(JSON.parse(fs.readFileSync(path.join(HERE, 'server.json'), 'utf8')).url || '');
+    return JSON.parse(fs.readFileSync(path.join(HERE, 'server.json'), 'utf8'));
   } catch {
-    return '';
+    return {};
   }
 })();
+const BUILT_IN_SERVER = String(SERVER_JSON.url || '');
+const DISCOVER_REPO = String(SERVER_JSON.discover || '');
+let discoveredServer = '';
+async function discover() {
+  discoveredServer = (await fetchAddress(DISCOVER_REPO, { fetchFn: (u, o) => net.fetch(u, o) })) || discoveredServer;
+  return discoveredServer;
+}
+
+// ---------- Публикация адреса туннеля (когда этот компьютер — сервер) ----------
+
+let publishState = { state: 'idle', error: null, at: null };
+async function publishTunnel(url) {
+  if (!config.publishToken || !DISCOVER_REPO || !url) return publishState;
+  publishState = { state: 'publishing', error: null, at: null };
+  try {
+    await publishAddress(DISCOVER_REPO, config.publishToken, url, { fetchFn: (u, o) => net.fetch(u, o) });
+    publishState = { state: 'ok', error: null, at: Date.now() };
+  } catch (e) {
+    publishState = { state: 'error', error: e.message, at: Date.now() };
+  }
+  send('tunnel:publish', publishState);
+  return publishState;
+}
 const libraryDir = () => config.libraryDir || path.join(app.getPath('home'), 'HYTEAM Library');
 const hostDataDir = () => config.hostDataDir || path.join(app.getPath('userData'), 'server-data');
 
@@ -402,9 +428,19 @@ async function connectTo(input) {
 
 async function boot() {
   try {
-    if (config.mode === 'host') await startHost(config.hostPort);
-    else if (config.mode === 'client' && config.serverUrl) await connectTo(config.serverUrl);
-    else if (BUILT_IN_SERVER) await connectTo(BUILT_IN_SERVER);
+    if (config.mode === 'host') return await startHost(config.hostPort);
+    if (config.mode === 'client' && config.serverUrl) {
+      try {
+        return await connectTo(config.serverUrl);
+      } catch (e) {
+        // Адрес туннеля сменился после перезапуска сервера — берём свежий из GitHub.
+        const fresh = await discover();
+        if (!fresh || fresh === config.serverUrl) throw e;
+        return await connectTo(fresh);
+      }
+    }
+    const target = BUILT_IN_SERVER || (await discover());
+    if (target) await connectTo(target);
     else showConnect();
   } catch (e) {
     showConnect(e.message);
@@ -444,8 +480,10 @@ function registerIpc() {
   handle('app:info', anyTrusted, () => ({
     version: app.getVersion(),
     mode: config.mode,
-    serverUrl: currentOrigin || config.serverUrl || BUILT_IN_SERVER,
+    serverUrl: currentOrigin || config.serverUrl || BUILT_IN_SERVER || discoveredServer,
     builtInServer: BUILT_IN_SERVER,
+    discovered: discoveredServer,
+    publish: { repo: DISCOVER_REPO, enabled: !!config.publishToken, ...publishState },
     recent: config.recent,
     hostPort: config.hostPort,
     hostDataDir: hostDataDir(),
@@ -460,6 +498,24 @@ function registerIpc() {
     config.tunnel = true;
     saveConfig();
     return tunnel.start(config.hostPort);
+  });
+  handle('tunnel:publish-token', fromServer, async (_e, token) => {
+    if (!server) throw new Error('Публиковать адрес может только свой сервер');
+    if (!DISCOVER_REPO) throw new Error('В этой сборке не указан репозиторий для адреса');
+    const t = String(token || '').trim();
+    if (t && !/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(t)) throw new Error('Это не похоже на токен GitHub (начинается с github_pat_)');
+    const prev = config.publishToken;
+    config.publishToken = t;
+    if (t && tunnel.get().state === 'on') {
+      const st = await publishTunnel(tunnel.get().url);
+      if (st.state === 'error') {
+        config.publishToken = prev;
+        throw new Error(st.error);
+      }
+    }
+    saveConfig();
+    if (!t) publishState = { state: 'idle', error: null, at: null };
+    return { repo: DISCOVER_REPO, enabled: !!t, ...publishState };
   });
   handle('tunnel:stop', fromServer, () => {
     config.tunnel = false;
@@ -568,6 +624,7 @@ app.whenReady().then(() => {
     send: (channel, data) => {
       send(channel, data);
       if (tray) ensureTray();
+      if (channel === 'tunnel:state' && data.state === 'on') publishTunnel(data.url);
     },
   });
   registerIpc();
