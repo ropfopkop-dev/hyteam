@@ -44,9 +44,45 @@ export default async function settings(el) {
           <div class="field-hint">Уже установленные игры останутся на своих местах</div></div>
         <div class="field"><label class="check"><input type="checkbox" id="s-auto" ${autoUpdateEnabled() ? 'checked' : ''}> Автоматически обновлять установленные игры</label>
           <div class="field-hint">Когда разработчик выпускает новую версию (в том числе новый релиз на GitHub), программа скачает и установит её сама. Запущенные игры обновятся после закрытия.</div></div>
+        <div class="field"><label class="check"><input type="checkbox" id="s-autostart" ${app.autostart ? 'checked' : ''}> Запускать HYTEAM вместе с Windows</label>
+          <div class="field-hint">Программа стартует свёрнутой в трей: обновления игр и сервер (если он на этом компьютере) работают сразу после включения.</div></div>
+        <div class="field"><label>Обновления программы</label><div class="s-row" id="s-update"></div></div>
         <div class="muted xs">HYTEAM для Windows, версия ${app.version}</div>
       </section>` : ''}
     </div>`);
+
+  $('#s-autostart', el)?.addEventListener('change', async (e) => {
+    try {
+      const on = await hy.setAutostart(e.target.checked);
+      e.target.checked = on;
+      toast(on ? 'HYTEAM будет запускаться вместе с Windows' : 'Автозапуск выключен');
+    } catch (err) {
+      toastError(err);
+    }
+  });
+
+  const updBox = $('#s-update', el);
+  if (updBox) {
+    const renderUpd = (u) => mount(updBox, updateView(u || {}));
+    renderUpd(app.update);
+    const stopUpd = hy.onUpdateState(renderUpd);
+    const prevStop = stopTunnelWatch;
+    stopTunnelWatch = () => {
+      prevStop();
+      stopUpd();
+    };
+    updBox.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-upd]');
+      if (!b) return;
+      b.disabled = true;
+      try {
+        if (b.dataset.upd === 'install') await hy.installUpdate();
+        else renderUpd(await hy.checkUpdate());
+      } catch (err) {
+        toastError(err);
+      }
+    });
+  }
 
   $('#s-auto', el)?.addEventListener('change', (e) => {
     setAutoUpdate(e.target.checked);
@@ -245,6 +281,20 @@ async function renderSecurity(box) {
       toastError(err);
     }
   };
+}
+
+function updateView(u) {
+  const text = {
+    checking: 'Проверяю…',
+    latest: 'Установлена последняя версия',
+    downloading: `Скачиваю версию ${u.version || ''}… ${u.percent || 0}%`,
+    ready: `Версия ${u.version} скачана и готова к установке`,
+    error: `Не удалось проверить: ${u.error || ''}`,
+  }[u.state] || 'Программа проверяет обновления сама раз в час';
+  return html`<span class="grow ${u.state === 'error' ? 'warn-text' : 'muted'}">${text}</span>
+    ${u.state === 'ready'
+      ? html`<button type="button" class="btn btn-primary btn-sm" data-upd="install">${icon('refresh', 14)} Перезапустить и обновить</button>`
+      : html`<button type="button" class="btn btn-soft btn-sm" data-upd="check" ${u.state === 'checking' || u.state === 'downloading' ? 'disabled' : ''}>Проверить сейчас</button>`}`;
 }
 
 function publishView(p) {

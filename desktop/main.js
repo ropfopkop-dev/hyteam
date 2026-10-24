@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { app, BrowserWindow, Menu, Tray, clipboard, dialog, ipcMain, nativeImage, net, screen, shell, utilityProcess } from 'electron';
+import { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, ipcMain, nativeImage, net, screen, shell, utilityProcess } from 'electron';
+import { createUpdater } from './updater.js';
 import { createGames } from './games.js';
 import { createTunnel } from './tunnel.js';
 import { fetchAddress, publishAddress } from '../server/publish-address.js';
@@ -88,6 +89,17 @@ let quitting = false;
 let currentOrigin = null;
 let games = null;
 let tunnel = null;
+let updater = null;
+// Запуск вместе с Windows: окно не показываем, программа ждёт в трее.
+const startHidden = process.argv.includes('--hidden');
+
+/** Уведомление Windows. Клик по нему открывает окно HYTEAM. */
+function notify(title, body) {
+  if (!Notification.isSupported()) return;
+  const n = new Notification({ title, body, icon: ICON });
+  n.on('click', showWindow);
+  n.show();
+}
 
 const send = (channel, data) => win && !win.isDestroyed() && win.webContents.send(channel, data);
 
@@ -184,8 +196,8 @@ function stopServer() {
     server.kill();
     server = null;
   }
-  tray?.destroy();
-  tray = null;
+  // Значок в трее остаётся (загрузки, автозапуск) — просто меню без пунктов сервера.
+  if (tray && !quitting) ensureTray();
 }
 
 async function startHost(port) {
@@ -216,8 +228,16 @@ async function startHost(port) {
 function ensureTray() {
   if (!tray) {
     tray = new Tray(nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 }));
-    tray.setToolTip('HYTEAM — сервер работает');
     tray.on('click', showWindow);
+  }
+  tray.setToolTip(server ? 'HYTEAM — сервер работает' : 'HYTEAM');
+  if (!server) {
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: 'Открыть HYTEAM', click: showWindow },
+      { type: 'separator' },
+      { label: 'Выход', click: () => { quitting = true; app.quit(); } },
+    ]));
+    return;
   }
   const lan = lanAddresses(config.hostPort)[0] || `http://localhost:${config.hostPort}`;
   const web = tunnel?.get().url;
@@ -281,7 +301,7 @@ function createWindow() {
     },
   });
   if (config.maximized) win.maximize();
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => !startHidden && win.show());
 
   const wc = win.webContents;
   const sendState = () => send('window:state', { maximized: win.isMaximized() });
@@ -337,8 +357,8 @@ function createWindow() {
     config.bounds = win.getNormalBounds();
     config.maximized = win.isMaximized();
     saveConfig();
-    // В режиме хоста сервер должен работать и при закрытом окне — прячемся в трей.
-    if (!quitting && server && config.mode === 'host') {
+    // В режиме хоста сервер должен работать и при закрытом окне, а загрузки — докачаться: прячемся в трей.
+    if (!quitting && ((server && config.mode === 'host') || games?.activeJobs())) {
       e.preventDefault();
       win.hide();
       if (!config.trayHintShown && tray) {
@@ -491,6 +511,8 @@ function registerIpc() {
     lan: server ? lanAddresses(config.hostPort) : [],
     libraryDir: libraryDir(),
     tunnel: tunnel.get(),
+    update: updater.get(),
+    autostart: app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin,
   }));
   handle('app:copy', anyTrusted, (_e, text) => clipboard.writeText(String(text ?? '').slice(0, 2000)));
   handle('tunnel:start', fromServer, async () => {
@@ -563,6 +585,17 @@ function registerIpc() {
   handle('games:play', fromServer, (_e, id) => games.play(currentOrigin, gameId(id)));
   handle('games:uninstall', fromServer, (_e, id) => games.uninstall(currentOrigin, gameId(id)));
   handle('games:ack-playtime', fromServer, (_e, id, minutes) => games.ackPlaytime(currentOrigin, gameId(id), Number(minutes) || 0));
+  handle('games:shortcut', fromServer, (_e, id) => games.shortcut(currentOrigin, gameId(id), app.getPath('desktop')));
+  handle('update:state', anyTrusted, () => updater.get());
+  handle('update:check', anyTrusted, () => updater.check());
+  handle('update:install', anyTrusted, () => {
+    quitting = true;
+    updater.install();
+  });
+  handle('app:autostart', fromServer, (_e, on) => {
+    app.setLoginItemSettings({ openAtLogin: !!on, args: ['--hidden'] });
+    return app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin;
+  });
   handle('games:open-folder', fromServer, (_e, id) => {
     const entry = games.entry(currentOrigin, gameId(id));
     if (entry) shell.openPath(entry.dir);
@@ -615,9 +648,14 @@ app.whenReady().then(() => {
   games = createGames({
     manifestFile: path.join(app.getPath('userData'), 'installed.json'),
     libraryDir,
-    send,
+    // Когда окно свёрнуто или в фоне, об окончании установки сообщаем уведомлением Windows.
+    send: (channel, data) => {
+      send(channel, data);
+      if (channel === 'games:state' && (data.notice || data.error) && !win?.isFocused()) notify('HYTEAM', data.notice || data.error);
+    },
     openExternal,
   });
+  updater = createUpdater({ send, notify });
   tunnel = createTunnel({
     binDir: path.join(app.getPath('userData'), 'bin'),
     logFile: path.join(app.getPath('userData'), 'tunnel.log'),
@@ -629,5 +667,6 @@ app.whenReady().then(() => {
   });
   registerIpc();
   createWindow();
+  ensureTray();
   boot();
 });

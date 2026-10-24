@@ -1024,3 +1024,17 @@ html.desktop.maximized body::after { display: none; }
 .w-row:first-child { border-top: 0; }
 .w-row > span:first-child { display: grid; gap: 2px; }
 .lib-cat { height: 38px; font-size: 13px; padding: 0 10px; }
+
+/* ---------- Загрузки и обновление программы ---------- */
+.dl-sec { margin-bottom: 18px; }
+.dl-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
+.dl-row:first-child { border-top: 0; padding-top: 0; }
+.dl-info { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.dl-info .name { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-bar { height: 6px; border-radius: 4px; background: rgba(139, 92, 246, 0.15); overflow: hidden; margin-top: 4px; }
+.dl-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.4s; }
+.dl-bar.busy i { animation: dl-pulse 1.4s ease-in-out infinite; }
+@keyframes dl-pulse { 50% { opacity: 0.45; } }
+.dl-pct { min-width: 44px; text-align: right; color: var(--accent-3); }
+.hy-update { position: fixed; right: 20px; bottom: 20px; z-index: 50; display: flex; align-items: center; gap: 10px; padding: 12px 14px 12px 18px;
+  border-radius: 14px; background: rgba(17, 11, 44, 0.96); border: 1px solid var(--line-2); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5); color: var(--text); font-weight: 600; }

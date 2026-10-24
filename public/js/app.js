@@ -1,7 +1,8 @@
 import { api, html, mount, $, $$, on, toast, toastError, promptBox, confirmBox, debounce, navigate, fmt } from './lib.js';
 import { state, isMod } from './state.js';
 import { icon, avatar, cover, gameAction, empty, spinner } from './components.js';
-import { hy, isDesktop, initDesktop } from './desktop.js';
+import { hy, isDesktop, initDesktop, activeJobs } from './desktop.js';
+import downloads from './pages/downloads.js';
 import home from './pages/home.js';
 import store from './pages/store.js';
 import game from './pages/game.js';
@@ -34,6 +35,7 @@ const routes = [
   { path: '/mod', page: moderation, mod: true },
   { path: '/settings', page: settings, auth: true },
   { path: '/wallet', page: wallet, auth: true },
+  { path: '/downloads', page: downloads },
   { path: '/login', page: login, guest: true },
   { path: '/register', page: register, guest: true },
   { path: '/reset', page: reset, guest: true },
@@ -47,6 +49,7 @@ const NAV = [
   { path: '/u/me', label: 'Профиль', ic: 'user', auth: true, match: '/u/' },
   { path: '/friends', label: 'Друзья', ic: 'userPlus', auth: true },
   { path: '/wishlist', label: 'Избранное', ic: 'heart', auth: true },
+  { path: '/downloads', label: 'Загрузки', ic: 'download', desktop: true, badge: () => activeJobs().length },
   { sep: 'Разработчикам', auth: true },
   { path: '/dev', label: 'Мои игры', ic: 'code', auth: true, match: '/publish' },
   { path: '/mod', label: 'Модерация', ic: 'shield', mod: true, badge: () => state.modPending },
@@ -283,7 +286,7 @@ function setupSearch() {
 }
 
 function renderSidebar() {
-  const items = NAV.filter((n) => (!n.auth || state.user) && (!n.mod || isMod()));
+  const items = NAV.filter((n) => (!n.auth || state.user) && (!n.mod || isMod()) && (!n.desktop || isDesktop));
   mount($('#sidebar'), html`
     <nav class="nav">
       ${items.map((n) => (n.sep
@@ -486,8 +489,15 @@ const gameFromButton = (b, id) => ({
 });
 
 /** Перерисовать все кнопки игры на странице после смены её состояния в приложении. */
+let shownJobs = 0;
 function rerenderGameButtons(id) {
   $$(`[data-gbtn="${id}"]`).forEach((el) => swap(el, gameAction(gameFromButton(el, id), el.dataset.cls)));
+  // Счётчик загрузок в меню слева.
+  if (activeJobs().length !== shownJobs) {
+    shownJobs = activeJobs().length;
+    renderSidebar();
+    markActive();
+  }
 }
 
 export async function refreshMe() {

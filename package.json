@@ -1,7 +1,7 @@
 {
   "name": "hyteam-store",
   "productName": "HYTEAM",
-  "version": "1.4.6",
+  "version": "1.5.0",
   "description": "HYTEAM вЂ” РјР°РіР°Р·РёРЅ РёРіСЂ: РјР°РіР°Р·РёРЅ, Р±РёР±Р»РёРѕС‚РµРєР°, СЃРѕРѕР±С‰РµСЃС‚РІРѕ, РїСЂРѕС„РёР»Рё Рё РјРѕРґРµСЂР°С†РёСЏ",
   "author": "HYTEAM",
   "private": true,
@@ -25,6 +25,7 @@
     "node": ">=22.13"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "express": "^5.1.0",
     "multer": "^2.0.2",
     "nodemailer": "^10.2.1"
@@ -76,6 +77,13 @@
       ],
       "language": "1049",
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ropfopkop-dev",
+        "repo": "hyteam"
+      }
+    ]
   }
 }

@@ -103,6 +103,16 @@ async function lonelyInstaller(dir) {
   return exes.length === 1 && /setup|install/i.test(path.basename(exes[0])) ? exes[0] : null;
 }
 
+function bytes(n) {
+  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i++;
+  }
+  return `${n < 10 && i ? n.toFixed(1).replace('.', ',') : Math.round(n)} ${units[i]}`;
+}
+
 async function dirSize(dir) {
   let total = 0;
   for (const ent of await fsp.readdir(dir, { withFileTypes: true })) {
@@ -141,7 +151,8 @@ export function createGames({ manifestFile, libraryDir, send, openExternal }) {
     send('games:state', {
       origin,
       id,
-      job: job ? { state: job.state, received: job.received, total: job.total } : null,
+      job: job ? { state: job.state, received: job.received, total: job.total, title: job.title } : null,
+      title: job?.title || entry(origin, id)?.title || '',
       running: running.has(key(origin, id)),
       installed: publicEntry(entry(origin, id)),
       ...extra,
@@ -152,7 +163,7 @@ export function createGames({ manifestFile, libraryDir, send, openExternal }) {
     const installed = {};
     for (const [id, e] of Object.entries(manifest.installed[origin] || {})) installed[id] = publicEntry(e);
     const active = {};
-    for (const j of jobs.values()) if (j.origin === origin) active[j.id] = { state: j.state, received: j.received, total: j.total };
+    for (const j of jobs.values()) if (j.origin === origin) active[j.id] = { state: j.state, received: j.received, total: j.total, title: j.title };
     const runningIds = [...running.keys()].filter((k) => k.startsWith(`${origin}|`)).map((k) => Number(k.split('|')[1]));
     return { installed, jobs: active, running: runningIds, pendingPlaytime: manifest.pendingPlaytime[origin] || {} };
   }
@@ -261,6 +272,17 @@ export function createGames({ manifestFile, libraryDir, send, openExternal }) {
     item.setSavePath(file);
     job.state = 'downloading';
     job.total = item.getTotalBytes();
+    // Места на диске должно хватить на файл и на распаковку/установку — иначе не начинаем.
+    if (job.total) {
+      fsp.statfs(tmp).then((st) => {
+        const free = st.bavail * st.bsize;
+        const need = job.total * (ARCHIVE_RE.test(filename) ? 2.5 : 1.5);
+        if (free < need) {
+          job.noSpace = `Недостаточно места на диске: нужно около ${bytes(need)}, свободно ${bytes(free)}. Освободите место или выберите другую папку в настройках.`;
+          item.cancel();
+        }
+      }).catch(() => {});
+    }
     let last = 0;
     item.on('updated', (_e, st) => {
       job.received = item.getReceivedBytes();
@@ -274,7 +296,7 @@ export function createGames({ manifestFile, libraryDir, send, openExternal }) {
       if (st !== 'completed') {
         jobs.delete(k);
         fs.rm(file, { force: true }, () => {});
-        emit(job.origin, job.id, st === 'cancelled' ? {} : { error: 'Загрузка прервалась. Попробуйте ещё раз.' });
+        emit(job.origin, job.id, job.noSpace ? { error: job.noSpace } : st === 'cancelled' ? {} : { error: 'Загрузка прервалась. Попробуйте ещё раз.' });
         return;
       }
       job.state = 'installing';
@@ -414,5 +436,15 @@ export function createGames({ manifestFile, libraryDir, send, openExternal }) {
     entry,
     isInside,
     hasRunning: () => running.size > 0,
+    activeJobs: () => jobs.size,
+    /** Ярлык программы на рабочем столе. */
+    shortcut(origin, id, desktopDir) {
+      const e = entry(origin, id);
+      if (!e?.exe || !fs.existsSync(e.exe)) throw new Error('Не найден файл запуска — сначала установите программу');
+      const file = path.join(desktopDir, `${safeName(e.title, 'HYTEAM')}.lnk`);
+      const ok = shell.writeShortcutLink(file, 'create', { target: e.exe, cwd: path.dirname(e.exe), icon: e.exe, iconIndex: 0, description: e.title });
+      if (!ok) throw new Error('Не удалось создать ярлык');
+      return file;
+    },
   };
 }

@@ -105,6 +105,7 @@ export default async function library(el, { query }) {
         ${!isDesktop && g.update_available ? html`<span class="chip chip-accent">${icon('sparkles', 12)} Вышло обновление</span>` : ''}
         <div class="grow"></div>
         ${inst ? html`
+          ${inst.hasExe ? html`<button class="icon-btn" data-act="shortcut" title="Ярлык на рабочем столе">${icon('monitor', 18)}</button>` : ''}
           <button class="icon-btn" data-act="folder" title="Открыть папку игры">${icon('layers', 18)}</button>
           <button class="icon-btn" data-act="exe" title="Указать файл запуска (.exe)">${icon('sliders', 18)}</button>
           <button class="icon-btn" data-act="uninstall" title="Удалить с компьютера">${icon('x', 18)}</button>` : ''}
@@ -143,6 +144,10 @@ export default async function library(el, { query }) {
     const g = selected;
     try {
       if (b.dataset.act === 'folder') await hy.openFolder(g.id);
+      if (b.dataset.act === 'shortcut') {
+        await hy.shortcut(g.id);
+        toast('Ярлык создан на рабочем столе');
+      }
       if (b.dataset.act === 'exe') await hy.chooseExe(g.id);
       if (b.dataset.act === 'uninstall') {
         if (!(await confirmBox(`Удалить «${g.title}» с компьютера?`, { ok: 'Удалить файлы', danger: true, note: 'Игра останется в библиотеке, её можно будет установить снова. Сохранения внутри папки игры будут удалены.' }))) return;
