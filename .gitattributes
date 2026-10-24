@@ -1,0 +1,6 @@
+# Скрипты для Linux должны оставаться с LF, иначе bash на сервере их не запустит
+* text=auto eol=lf
+*.bat text eol=crlf
+*.png binary
+*.webp binary
+*.ico binary

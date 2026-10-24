@@ -1,0 +1,81 @@
+{
+  "name": "hyteam-store",
+  "productName": "HYTEAM",
+  "version": "1.4.5",
+  "description": "HYTEAM вЂ” РјР°РіР°Р·РёРЅ РёРіСЂ: РјР°РіР°Р·РёРЅ, Р±РёР±Р»РёРѕС‚РµРєР°, СЃРѕРѕР±С‰РµСЃС‚РІРѕ, РїСЂРѕС„РёР»Рё Рё РјРѕРґРµСЂР°С†РёСЏ",
+  "author": "HYTEAM",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "node --use-env-proxy --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning server/index.js",
+    "seed": "node --disable-warning=ExperimentalWarning server/seed.js",
+    "make-admin": "node --disable-warning=ExperimentalWarning server/make-admin.js",
+    "backup": "node --disable-warning=ExperimentalWarning server/backup.js",
+    "pack-server": "tar -czf hyteam-server.tar.gz server public deploy package.json package-lock.json",
+    "desktop": "electron .",
+    "icon": "electron desktop/scripts/make-icon.mjs",
+    "dist": "electron-builder --win nsis --x64",
+    "set-server": "node desktop/scripts/set-server.mjs",
+    "set-password": "node --disable-warning=ExperimentalWarning server/set-password.js",
+    "transfer": "node deploy/transfer.mjs"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^10.2.1"
+  },
+  "devDependencies": {
+    "electron": "^44.9.3",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.hyteam.store",
+    "productName": "HYTEAM",
+    "copyright": "HYTEAM",
+    "directories": {
+      "output": "dist",
+      "buildResources": "desktop/build"
+    },
+    "files": [
+      "package.json",
+      "desktop/**/*",
+      "!desktop/build/**",
+      "!desktop/scripts/**",
+      "server/**/*",
+      "public/**/*"
+    ],
+    "asar": false,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/build/icon.png",
+      "executableName": "HYTEAM"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "HYTEAM",
+      "uninstallDisplayName": "HYTEAM",
+      "artifactName": "HYTEAM-Setup-${version}.exe",
+      "installerLanguages": [
+        "ru_RU"
+      ],
+      "language": "1049",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

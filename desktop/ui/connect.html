@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'">
+  <title>HYTEAM</title>
+  <link rel="stylesheet" href="connect.css">
+</head>
+<body>
+  <header class="titlebar">
+    <img src="../../public/assets/logo.webp" alt="">
+    <span><b>HYTEAM</b> Game Store</span>
+  </header>
+
+  <main class="wrap">
+    <section class="card">
+      <img class="logo" src="../../public/assets/logo.webp" alt="HYTEAM">
+      <h1>Добро пожаловать в HYTEAM</h1>
+      <p class="muted">Подключитесь к серверу магазина или запустите свой — тогда к вам смогут подключаться друзья.</p>
+
+      <div class="error" id="error" hidden></div>
+
+      <div class="tabs" role="tablist">
+        <button class="on" data-tab="client" role="tab">Подключиться</button>
+        <button data-tab="host" role="tab">Свой сервер</button>
+        <button data-tab="offline" role="tab" id="offline-tab" hidden>Без сервера</button>
+      </div>
+
+      <form class="pane" id="client">
+        <label for="url">Адрес сервера</label>
+        <input id="url" placeholder="например, 192.168.1.10:3000 или hyteam.example.ru" autocomplete="off" spellcheck="false" required>
+        <div class="recent" id="recent"></div>
+        <button class="btn" type="submit"><span>Подключиться</span></button>
+        <p class="hint">Адрес даст владелец магазина: в его сети — вида <b>192.168.1.10:3000</b>, из интернета — вида <b>https://….trycloudflare.com</b> или домен сервера. Если сервер на этом же компьютере — <a href="#" id="local">localhost:3000</a>.</p>
+      </form>
+
+      <div class="pane" id="offline" hidden>
+        <p class="note">Сервер магазина сейчас недоступен, но бесплатные программы с GitHub и сайтов разработчиков можно ставить и запускать и без него.</p>
+        <input id="offline-q" placeholder="Поиск программы" autocomplete="off" spellcheck="false">
+        <div class="offline-list" id="offline-list"></div>
+        <p class="hint" id="offline-saved"></p>
+      </div>
+
+      <form class="pane" id="host" hidden>
+        <p class="note">Ваш компьютер станет сервером HYTEAM. Друзья из вашей сети подключатся по вашему адресу. <b>Первый зарегистрированный аккаунт станет владельцем магазина.</b></p>
+        <div class="row">
+          <div class="field">
+            <label for="port">Порт</label>
+            <input id="port" type="number" min="1" max="65535" value="3000" required>
+          </div>
+          <div class="field grow">
+            <label>Папка с данными сервера</label>
+            <div class="path"><span id="datadir">…</span><button type="button" class="link" id="pick">Изменить</button></div>
+          </div>
+        </div>
+        <button class="btn" type="submit"><span>Запустить сервер</span></button>
+        <p class="hint">Пока сервер работает, HYTEAM можно свернуть в трей — магазин останется доступен друзьям.</p>
+      </form>
+    </section>
+    <p class="version" id="version"></p>
+  </main>
+  <script src="connect.js"></script>
+</body>
+</html>
